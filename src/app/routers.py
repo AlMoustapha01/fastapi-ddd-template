@@ -5,11 +5,13 @@ from fastapi.responses import RedirectResponse
 
 from core.presentation.http.health import create_health_router
 from modules.projects.presentation.http.router import create_projects_router
+from modules.tasks.presentation.http.router import create_tasks_router
 
 
 def create_api_v1_router() -> APIRouter:
     router = APIRouter(prefix="/api/v1")
     router.include_router(create_projects_router())
+    router.include_router(create_tasks_router())
     return router
 
 
