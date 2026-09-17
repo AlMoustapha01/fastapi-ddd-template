@@ -133,3 +133,43 @@ name = "ruff"
 type = "module"
 module = "ruff"
 options = "format REVISION_SCRIPT_FILENAME"
+
+[tool.importlinter]
+root_packages = ["app", "core", "modules"]
+
+[[tool.importlinter.contracts]]
+name = "core depends on neither app nor modules"
+type = "forbidden"
+source_modules = ["core"]
+forbidden_modules = ["app", "modules"]
+
+[[tool.importlinter.contracts]]
+name = "modules do not depend on app"
+type = "forbidden"
+source_modules = ["modules"]
+forbidden_modules = ["app"]
+
+[[tool.importlinter.contracts]]
+name = "Layers inside core and every module"
+type = "layers"
+containers = ["core", "modules.projects", "modules.tasks"]
+layers = ["presentation | infrastructure", "application", "domain"]
+
+[[tool.importlinter.contracts]]
+name = "projects does not depend on tasks"
+type = "forbidden"
+source_modules = ["modules.projects"]
+forbidden_modules = ["modules.tasks"]
+
+[[tool.importlinter.contracts]]
+name = "tasks only uses the public API of projects"
+type = "forbidden"
+source_modules = ["modules.tasks"]
+forbidden_modules = [
+    "modules.projects.application",
+    "modules.projects.domain",
+    "modules.projects.infrastructure",
+    "modules.projects.presentation",
+    "modules.projects.provider",
+]
+allow_indirect_imports = true

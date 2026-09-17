@@ -35,6 +35,7 @@ lint: ## Run static checks
 	$(UV) ruff check
 	$(UV) mypy
 	$(UV) slotscheck src
+	$(UV) lint-imports
 
 test: ## Run all tests (integration tests need Docker)
 	$(UV) pytest
