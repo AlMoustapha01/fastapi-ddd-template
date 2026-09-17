@@ -29,12 +29,17 @@ UNREACHABLE_DATABASE = DatabaseSettings(
 
 
 def make_settings(
-    *, docs_enabled: bool = True, allow_origins: list[str] | None = None
+    *,
+    docs_enabled: bool = True,
+    allow_origins: list[str] | None = None,
+    allow_credentials: bool = False,
 ) -> Settings:
     return Settings(
         app=AppSettings(docs_enabled=docs_enabled),
         database=UNREACHABLE_DATABASE,
-        cors=CorsSettings(allow_origins=allow_origins or []),
+        cors=CorsSettings(
+            allow_origins=allow_origins or [], allow_credentials=allow_credentials
+        ),
         _env_file=None,
     )
 
@@ -222,13 +227,19 @@ async def test_docs_can_be_disabled() -> None:
         await application.state.dishka_container.close()
 
 
-async def test_cors_is_enabled_for_configured_origins() -> None:
+@pytest.mark.parametrize("allow_credentials", [False, True])
+async def test_cors_is_enabled_for_configured_origins(allow_credentials: bool) -> None:
     origin = "http://localhost:3000"
-    application = create_app(make_settings(allow_origins=[origin]))
+    application = create_app(
+        make_settings(allow_origins=[origin], allow_credentials=allow_credentials)
+    )
     transport = ASGITransport(app=application, raise_app_exceptions=False)
     try:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/health", headers={"Origin": origin})
         assert response.headers["access-control-allow-origin"] == origin
+        assert (
+            response.headers.get("access-control-allow-credentials") == "true"
+        ) is allow_credentials
     finally:
         await application.state.dishka_container.close()

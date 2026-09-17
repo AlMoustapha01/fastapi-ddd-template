@@ -36,7 +36,7 @@ def create_app(settings: Settings | None = None, *providers: Provider) -> FastAP
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors.allow_origins,
-            allow_credentials=True,
+            allow_credentials=settings.cors.allow_credentials,
             allow_methods=["*"],
             allow_headers=["*"],
         )

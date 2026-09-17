@@ -21,9 +21,10 @@ WORKDIR /app
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --chown=app:app pyproject.toml ./
-COPY --chown=app:app migrations ./migrations
+# Code and dependencies stay owned by root: the runtime user can only read them.
+COPY --from=builder /app/.venv /app/.venv
+COPY pyproject.toml ./
+COPY migrations ./migrations
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \

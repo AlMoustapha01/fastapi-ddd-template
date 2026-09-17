@@ -55,6 +55,7 @@ class DatabaseSettings(BaseModel):
 
 class CorsSettings(BaseModel):
     allow_origins: list[str] = Field(default_factory=list)
+    allow_credentials: bool = False
 
 
 class LogSettings(BaseModel):
