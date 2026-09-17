@@ -16,6 +16,7 @@ class InMemoryProjectRepository(ProjectRepositoryPort):
         self.projects: dict[UUID, Project] = {p.id_.value: p for p in projects}
         self.deleted: list[Project] = []
         self.list_calls: list[dict[str, object]] = []
+        self.locked: list[UUID] = []
 
     async def add(self, entity: Project) -> None:
         self.projects[entity.id_.value] = entity
@@ -27,7 +28,11 @@ class InMemoryProjectRepository(ProjectRepositoryPort):
         self.projects.pop(entity.id_.value, None)
         self.deleted.append(entity)
 
-    async def get_by_id(self, entity_id: ProjectId) -> Project | None:
+    async def get_by_id(
+        self, entity_id: ProjectId, *, lock: bool = False
+    ) -> Project | None:
+        if lock:
+            self.locked.append(entity_id.value)
         return self.projects.get(entity_id.value)
 
     async def exists_by_name(

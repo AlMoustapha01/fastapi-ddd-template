@@ -1,7 +1,8 @@
 """
 Public API of the projects module.
 
-Other modules may import this file only. It never exposes domain objects.
+Other modules may import this file only. It exposes read-only summaries and the
+domain events other modules may react to, never entities or repositories.
 """
 
 from dataclasses import dataclass
@@ -27,8 +28,16 @@ class ProjectsPublicApi:
     def __init__(self, repository: ProjectRepositoryPort) -> None:
         self._repository = repository
 
-    async def get_summary(self, project_id: UUID) -> ProjectSummary | None:
-        project = await self._repository.get_by_id(ProjectId(project_id))
+    async def get_summary(
+        self, project_id: UUID, *, lock: bool = False
+    ) -> ProjectSummary | None:
+        """
+        Return a summary of the project, or `None` if it does not exist.
+
+        `lock=True` keeps the project from being archived or deleted until the
+        caller's transaction ends (use it before writing data that depends on it).
+        """
+        project = await self._repository.get_by_id(ProjectId(project_id), lock=lock)
         if project is None:
             return None
         return ProjectSummary(

@@ -12,8 +12,8 @@ class ProjectsModuleLookup(ProjectLookupPort):
     def __init__(self, projects: ProjectsPublicApi) -> None:
         self._projects = projects
 
-    async def get(self, project_id: UUID) -> ProjectRef | None:
-        summary = await self._projects.get_summary(project_id)
+    async def get(self, project_id: UUID, *, lock: bool = False) -> ProjectRef | None:
+        summary = await self._projects.get_summary(project_id, lock=lock)
         if summary is None:
             return None
         return ProjectRef(id=summary.id, is_active=summary.is_active)

@@ -72,6 +72,9 @@ class InMemoryTaskRepository(TaskRepositoryPort):
 class FakeProjectLookup(ProjectLookupPort):
     def __init__(self, *projects: ProjectRef) -> None:
         self.projects = {project.id: project for project in projects}
+        self.locked: list[UUID] = []
 
-    async def get(self, project_id: UUID) -> ProjectRef | None:
+    async def get(self, project_id: UUID, *, lock: bool = False) -> ProjectRef | None:
+        if lock:
+            self.locked.append(project_id)
         return self.projects.get(project_id)

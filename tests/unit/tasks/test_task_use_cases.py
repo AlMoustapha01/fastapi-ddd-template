@@ -67,6 +67,18 @@ class TestCreateTask:
         assert task.id in repository.tasks
         assert uow.commits == 1
 
+    async def test_locks_the_project_until_the_task_is_committed(
+        self, uow: FakeUnitOfWork
+    ) -> None:
+        project = ProjectRef(id=uuid4(), is_active=True)
+        lookup = FakeProjectLookup(project)
+
+        await CreateTaskCommand(InMemoryTaskRepository(), lookup, uow).execute(
+            CreateTaskRequest(project_id=project.id, title="Draft")
+        )
+
+        assert lookup.locked == [project.id]
+
     async def test_unknown_project_is_rejected(self, uow: FakeUnitOfWork) -> None:
         repository = InMemoryTaskRepository()
         command = CreateTaskCommand(repository, FakeProjectLookup(), uow)

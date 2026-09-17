@@ -1,5 +1,6 @@
 """Cross-module reactions to project events, inside one transaction."""
 
+import asyncio
 from typing import override
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from dishka import AsyncContainer, Provider, Scope, provide
 
 from app.main import create_app
 from core.application.event_bus import EventHandler, EventHandlerRegistry
+from core.application.unit_of_work import UnitOfWork
 from core.infrastructure.settings import Settings
 from modules.projects.application.commands import (
     ArchiveProjectCommand,
@@ -33,8 +35,10 @@ from modules.tasks.application.commands import (
 from modules.tasks.application.dto import TaskDTO
 from modules.tasks.application.event_handlers import CancelTasksOnProjectArchived
 from modules.tasks.application.queries import GetTaskByIdQuery, GetTaskByIdRequest
+from modules.tasks.domain.entities import Task
 from modules.tasks.domain.enums import TaskStatus
 from modules.tasks.domain.errors import TaskNotFoundError
+from modules.tasks.domain.ports import ProjectLookupPort, TaskRepositoryPort
 
 
 async def create_project(container: AsyncContainer, name: str) -> ProjectDTO:
@@ -93,6 +97,34 @@ async def test_deleting_a_project_deletes_its_tasks(container: AsyncContainer) -
     with pytest.raises(TaskNotFoundError):
         await get_task(container, task.id)
     assert (await get_task(container, other_task.id)).id == other_task.id
+
+
+async def archive_project(container: AsyncContainer, project_id: UUID) -> None:
+    async with container() as scope:
+        command = await scope.get(ArchiveProjectCommand)
+        await command.execute(ArchiveProjectRequest(project_id=project_id))
+
+
+async def test_archiving_waits_for_a_task_being_created_and_cancels_it(
+    container: AsyncContainer,
+) -> None:
+    project = await create_project(container, "Website")
+
+    async with container() as creating:
+        project_ref = await (await creating.get(ProjectLookupPort)).get(
+            project.id, lock=True
+        )
+        assert project_ref is not None
+        assert project_ref.is_active
+        archiving = asyncio.create_task(archive_project(container, project.id))
+        await asyncio.sleep(0.5)
+        assert not archiving.done()
+        task = Task.create(project_id=project.id, title="Created during archive")
+        await (await creating.get(TaskRepositoryPort)).add(task)
+        await (await creating.get(UnitOfWork)).commit()
+
+    await asyncio.wait_for(archiving, timeout=10)
+    assert (await get_task(container, task.id_.value)).status is TaskStatus.CANCELLED
 
 
 class ExplodingHandler(EventHandler[ProjectArchived]):

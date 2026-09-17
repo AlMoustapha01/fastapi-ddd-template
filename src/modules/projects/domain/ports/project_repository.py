@@ -15,7 +15,11 @@ class ProjectRepositoryPort(Protocol):
 
     async def delete(self, entity: Project) -> None: ...
 
-    async def get_by_id(self, entity_id: ProjectId) -> Project | None: ...
+    async def get_by_id(
+        self, entity_id: ProjectId, *, lock: bool = False
+    ) -> Project | None:
+        """`lock=True`: the project cannot change until the transaction ends."""
+        ...
 
     async def exists_by_name(
         self, name: ProjectName, *, exclude_id: ProjectId | None = None

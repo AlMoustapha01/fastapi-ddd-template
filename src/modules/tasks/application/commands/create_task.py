@@ -24,7 +24,12 @@ class CreateTaskRequest:
 
 
 class CreateTaskCommand:
-    """Create a task in an active project."""
+    """
+    Create a task in an active project.
+
+    The project is locked until commit, so a concurrent archive or delete waits for
+    this transaction and then sees (and cancels or deletes) the new task.
+    """
 
     def __init__(
         self,
@@ -42,7 +47,7 @@ class CreateTaskCommand:
             title=request.title,
             description=request.description,
         )
-        project = await self._project_lookup.get(request.project_id)
+        project = await self._project_lookup.get(request.project_id, lock=True)
         if project is None:
             raise TaskProjectNotFoundError(request.project_id)
         if not project.is_active:

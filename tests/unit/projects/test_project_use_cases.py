@@ -223,6 +223,14 @@ class TestProjectsPublicApi:
             id=project.id_.value, name="Website", is_active=False
         )
 
+    async def test_can_lock_the_project(self) -> None:
+        project = make_project()
+        repository = InMemoryProjectRepository(project)
+
+        await ProjectsPublicApi(repository).get_summary(project.id_.value, lock=True)
+
+        assert repository.locked == [project.id_.value]
+
     async def test_returns_none_for_an_unknown_project(self) -> None:
         api = ProjectsPublicApi(InMemoryProjectRepository())
 

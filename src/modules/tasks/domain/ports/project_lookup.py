@@ -12,4 +12,6 @@ class ProjectRef:
 
 
 class ProjectLookupPort(Protocol):
-    async def get(self, project_id: UUID) -> ProjectRef | None: ...
+    async def get(self, project_id: UUID, *, lock: bool = False) -> ProjectRef | None:
+        """`lock=True`: the project cannot be archived or deleted until commit."""
+        ...

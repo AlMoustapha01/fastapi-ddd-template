@@ -80,8 +80,18 @@ class SqlaRepository[TEntity: AggregateRoot[Any, Any], TModel: Base]:
             await self._session.delete(model)
         self._tracker.track(entity)
 
-    async def get_by_id(self, entity_id: EntityId) -> TEntity | None:
+    async def get_by_id(
+        self, entity_id: EntityId, *, lock: bool = False
+    ) -> TEntity | None:
+        """
+        Load an aggregate.
+
+        `lock=True` takes a shared row lock (`FOR SHARE`) held until the end of the
+        transaction: concurrent updates and deletes of that row wait for it.
+        """
         statement = select(self._model).where(self._primary_key == entity_id.value)
+        if lock:
+            statement = statement.with_for_update(read=True)
         model = await self._session.scalar(statement)
         return None if model is None else self._load(model)
 
