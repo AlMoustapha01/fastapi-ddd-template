@@ -6,12 +6,12 @@ build-backend = "hatchling.build"
 sources = ["src"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/app"]
+packages = ["src/app", "src/core", "src/modules"]
 
 [project]
-name = "backend"
+name = "fastapi-ddd-template"
 version = "0.1.0"
-description = "Add your description here"
+description = "FastAPI boilerplate following Domain-Driven Design, Clean Architecture and CQRS"
 readme = "README.md"
 authors = [
     { name = "Doumbia Al Moustapha", email = "doumbialmoustapha@gmail.com" },
@@ -19,24 +19,19 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.16.5",
-    "alembic-postgresql-enum>=1.8.0",
     "dishka>=1.7.2",
     "fastapi>=0.118.2",
-    "fastapi-error-map>=0.9.6",
-    "httpx>=0.28.1",
-    "keyof>=0.4.0",
-    "openpyxl>=3.1.5",
     "psycopg[binary]>=3.2.10",
-    "python-jose[cryptography]>=3.5.0",
-    "python-slugify[unidecode]>=8.0.4",
-    "sqlalchemy[mypy]>=2.0.43",
+    "pydantic>=2.12.0",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy[asyncio]>=2.0.43",
     "uuid-utils>=0.11.1",
-    "uvicorn>=0.37.0",
-    "uvloop>=0.21.0",
+    "uvicorn[standard]>=0.53.0",
 ]
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.15",
     "mypy>=1.18.2",
     "pre-commit>=4.3.0",
     "ruff>=0.14.0",
@@ -46,9 +41,9 @@ dev = [
 test = [
     "coverage>=7.10.7",
     "httpx>=0.28.1",
-    "line-profiler>=5.0.0",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+    "testcontainers[postgres]>=4.15.0",
 ]
 
 [tool.coverage.report]
@@ -57,212 +52,73 @@ skip_empty = true
 exclude_also = [
     "if __name__ == .__main__.:",
     '@(abc\.)?abstractmethod',
-    "pass",
     '\.\.\.',
-    "from .*",
-    "import .*",
-    'logging\..*',
-    'log\..*',
 ]
-
 
 [tool.coverage.run]
-source = ["src", ]
-omit = [
-    "**/__init__.py",
-    "**/alembic/**",
-]
-concurrency = [
-    "multiprocessing",
-    "thread",
-]
+source = ["src"]
+omit = ["**/__init__.py"]
+concurrency = ["thread"]
 parallel = true
 branch = true
 
 [tool.mypy]
-files = [
-    "config",
-    "scripts",
-    "src",
-]
-exclude = [
-    "^.*alembic.*$",
-    "^src/core/config/database/migrations/versions/.*$",
-]
+files = ["src", "tests"]
 strict = true
 ignore_missing_imports = true
 allow_subclassing_any = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
 disallow_untyped_defs = false
-plugins = [
-    "pydantic.mypy",
-    "sqlalchemy.ext.mypy.plugin",
-    "keyof.mypy_plugin",
-]
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests", ]
-markers = ["slow", ]
-addopts = "-m 'not slow'"
+testpaths = ["tests"]
+asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: needs Docker (PostgreSQL is started with testcontainers)",
+]
 
 [tool.ruff]
 line-length = 88
-preview = true  # experimental
-
+preview = true
+src = ["src", "."]
 
 [tool.ruff.format]
 skip-magic-trailing-comma = false
 
 [tool.ruff.lint]
 select = [
-    "A", # flake8-builtins            https://docs.astral.sh/ruff/rules/#flake8-builtins-a
-    "ARG", # flake8-unused-arguments  https://docs.astral.sh/ruff/rules/#flake8-unused-arguments-arg
-    "ASYNC", # flake8-async           https://docs.astral.sh/ruff/rules/#flake8-async-async
-    "B", # flake8-bugbear             https://docs.astral.sh/ruff/rules/#flake8-bugbear-b
-    "C4", # flake8-comprehensions     https://docs.astral.sh/ruff/rules/#flake8-comprehensions-c4
-    "C90", # mccabe                   https://docs.astral.sh/ruff/rules/#mccabe-c90
-    #    "COM", # flake8-commas            https://docs.astral.sh/ruff/rules/#flake8-commas-com
-    # Incompatible with ruff formatter, but can be useful (uncomment once, then review changes)
-    # See: https://github.com/astral-sh/ruff/issues/9216
-    "DTZ", # flake8-datetimez         https://docs.astral.sh/ruff/rules/#flake8-datetimez-dtz
-    "E", # pycodestyle-error          https://docs.astral.sh/ruff/rules/#error-e
-    "ERA001", # commented-out-code    https://docs.astral.sh/ruff/rules/#eradicate-era
-    "F", # pyflakes                   https://docs.astral.sh/ruff/rules/#pyflakes-f
-    "FLY", # flynt                    https://docs.astral.sh/ruff/rules/#flynt-fly
-    "I", # isort                      https://docs.astral.sh/ruff/rules/#isort-i
-    "LOG", # flake8-logging           https://docs.astral.sh/ruff/rules/#flake8-logging-log
-    "N", # pep8-naming                https://docs.astral.sh/ruff/rules/#pep8-naming-n
-    "PERF", # Perflint                https://docs.astral.sh/ruff/rules/#perflint-perf
-    "PL", # pylint                    https://docs.astral.sh/ruff/rules/#pylint-pl
-    "PT", # flake8-pytest-style       https://docs.astral.sh/ruff/rules/#flake8-pytest-style-pt
-    "PTH", # flake8-use-pathlib       https://docs.astral.sh/ruff/rules/#flake8-use-pathlib-pth
-    "Q", # flake8-quotes              https://docs.astral.sh/ruff/rules/#flake8-quotes-q
-    "RET", # flake8-return (RET)      https://docs.astral.sh/ruff/rules/#flake8-return-ret
-    "RSE", # flake8-raise (RSE)       https://docs.astral.sh/ruff/rules/#flake8-raise-rse
-    "RUF", # Ruff-specific rules      https://docs.astral.sh/ruff/rules/#ruff-specific-rules-ruf
-    "S", # flake8-bandit              https://docs.astral.sh/ruff/rules/#flake8-bandit-s
-    "SIM", # flake8-simplify          https://docs.astral.sh/ruff/rules/#flake8-simplify-sim
-    "SLF", # flake8-self (SLF)        https://docs.astral.sh/ruff/rules/#flake8-self-slf
-    "SLOT", # flake8-slots            https://docs.astral.sh/ruff/rules/#flake8-slots-slot
-    "T20", # flake8-print             https://docs.astral.sh/ruff/rules/#flake8-print-t20
-    "TCH", # flake8-type-checking     https://docs.astral.sh/ruff/rules/#flake8-type-checking-tch
-    "TID", # flake8-tidy-imports      https://docs.astral.sh/ruff/rules/#flake8-tidy-imports-tid
-    "UP", # pyupgrade                 https://docs.astral.sh/ruff/rules/#pyupgrade-up
-    "W", # pycodestyle-warning        https://docs.astral.sh/ruff/rules/#warning-w
+    "A", "ARG", "ASYNC", "B", "C4", "C90", "DTZ", "E", "ERA001", "F", "FLY", "I",
+    "LOG", "N", "PERF", "PL", "PT", "PTH", "Q", "RET", "RSE", "RUF", "S", "SIM",
+    "SLF", "SLOT", "T20", "TCH", "TID", "UP", "W",
 ]
 ignore = [
-    "N818", # error-suffix-on-exception-name
+    "N818",    # error-suffix-on-exception-name
     "PLR0913", # too-many-arguments
     "PLR0917", # too-many-positional-arguments
     "PLR6301", # no-self-use
-    "PTH123", # builtin-open
-    "TC001", # typing-only-first-party-import
-    "TC002", # typing-only-third-party-import
-    "TC003", # typing-only-standard-library-import
-    "TC006", # runtime-cast-value
-    "UP015", # redundant-open-modes
+    "PTH123",  # builtin-open
+    "RUF029",  # unused-async: endpoints and port implementations may not await
+    "TC001",   # typing-only-first-party-import
+    "TC002",   # typing-only-third-party-import
+    "TC003",   # typing-only-standard-library-import
+    "TC006",   # runtime-cast-value
+    "UP015",   # redundant-open-modes
 ]
 
-
 [tool.ruff.lint.per-file-ignores]
-"alembic/**" = ["ALL", ]
-"scripts/dishka/plot_dependencies_data.py" = ["ALL", ]
-"tests/**" = ["S101", "PLR2004"]  # Allow assert and magic values in tests
-"src/modules/auth/presentation/http/controllers/**" = ["B008"]  # FastAPI dependency pattern
-"src/modules/auth/application/dependencies.py" = ["B008"]  # FastAPI dependency factory pattern
-
+"migrations/versions/**" = ["ALL"]
+"scripts/**" = ["T201"]
+"tests/**" = ["S101", "PLR2004"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
 force-wrap-aliases = true
 split-on-trailing-comma = true
 
-
 [tool.slotscheck]
 strict-imports = false
-exclude-modules = '''
-^core\.config\.database\.migrations
-'''
-
-[tool.alembic]
-
-# path to migration scripts.
-# this is typically a path given in POSIX (e.g. forward slashes)
-# format, relative to the token %(here)s which refers to the location of this
-# ini file
-script_location = "%(here)s/src/core/config/database/migrations"
-
-# template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
-# Uncomment the line below if you want the files to be prepended with date and time
-# see https://alembic.sqlalchemy.org/en/latest/tutorial.html#editing-the-ini-file
-# for all available tokens
-# file_template = "%%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s"
-
-# additional paths to be prepended to sys.path. defaults to the current working directory.
-prepend_sys_path = [
-    "."
-]
-
-# timezone to use when rendering the date within the migration file
-# as well as the filename.
-# If specified, requires the python>=3.9 or backports.zoneinfo library and tzdata library.
-# Any required deps can installed by adding `alembic[tz]` to the pip requirements
-# string value is passed to ZoneInfo()
-# leave blank for localtime
-# timezone =
-
-# max length of characters to apply to the "slug" field
-# truncate_slug_length = 40
-
-# set to 'true' to run the environment during
-# the 'revision' command, regardless of autogenerate
-# revision_environment = false
-
-# set to 'true' to allow .pyc and .pyo files without
-# a source .py file to be detected as revisions in the
-# versions/ directory
-# sourceless = false
-
-# version location specification; This defaults
-# to <script_location>/versions.  When using multiple version
-# directories, initial revisions must be specified with --version-path.
-# version_locations = [
-#    "%(here)s/alembic/versions",
-#    "%(here)s/foo/bar"
-# ]
-
-
-# set to 'true' to search source files recursively
-# in each "version_locations" directory
-# new in Alembic version 1.10
-# recursive_version_locations = false
-
-# the output encoding used when revision files
-# are written from script.py.mako
-# output_encoding = "utf-8"
-
-# This section defines scripts or Python functions that are run
-# on newly generated revision scripts.  See the documentation for further
-# detail and examples
-# [[tool.alembic.post_write_hooks]]
-# format using "black" - use the console_scripts runner,
-# against the "black" entrypoint
-# name = "black"
-# type = "console_scripts"
-# entrypoint = "black"
-# options = "-l 79 REVISION_SCRIPT_FILENAME"
-#
-# [[tool.alembic.post_write_hooks]]
-# lint with attempts to fix using "ruff" - use the module runner, against the "ruff" module
-# name = "ruff"
-# type = "module"
-# module = "ruff"
-# options = "check --fix REVISION_SCRIPT_FILENAME"
-#
-# [[tool.alembic.post_write_hooks]]
-# Alternatively, use the exec runner to execute a binary found on your PATH
-# name = "ruff"
-# type = "exec"
-# executable = "ruff"
-# options = "check --fix REVISION_SCRIPT_FILENAME"
-

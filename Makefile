@@ -1,107 +1,55 @@
-# Environment
-PYTHON := python
-CONFIGS_DIG := config
-TOML_CONFIG_MANAGER := $(CONFIGS_DIG)/toml_config_manager.py
+.DEFAULT_GOAL := help
+UV := uv run
 
-.PHONY: guard-APP_ENV
-guard-APP_ENV:
-	@if [ -z "$$APP_ENV" ]; then \
-		echo "APP_ENV is not set. Set APP_ENV before running this command."; \
-		exit 1; \
-	fi
+.PHONY: help install run up down migrate migration format lint test test.unit cov clean deps-graph
 
-.PHONY: env dotenv
-env:
-	@echo APP_ENV=$(APP_ENV)
+help: ## Show available commands
+	@grep -E '^[a-zA-Z_.-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
-dotenv: guard-APP_ENV
-	@$(PYTHON) $(TOML_CONFIG_MANAGER) $(APP_ENV)
+install: ## Install dependencies and create .env from .env.example
+	uv sync --group dev
+	@test -f .env || cp .env.example .env
 
-# Docker compose
-DOCKER_COMPOSE := docker compose
-DOCKER_COMPOSE_PRUNE := scripts/makefile/docker_prune.sh
+run: ## Run the API locally with auto-reload
+	$(UV) uvicorn app.main:create_app --factory --reload --host 127.0.0.1 --port 8000
 
-.PHONY: up.db up.db-echo up up.echo up.keycloak down down.total logs.db shell.db prune
-up.db: guard-APP_ENV
-	@echo "APP_ENV=$(APP_ENV)"
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) up -d web_app_db_pg --build
+up: ## Build and start PostgreSQL and the API with Docker Compose
+	docker compose up -d --build
 
-up.db-echo: guard-APP_ENV
-	@echo "APP_ENV=$(APP_ENV)"
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) up web_app_db_pg --build
+down: ## Stop the Docker Compose stack
+	docker compose down
 
-up: guard-APP_ENV
-	@echo "APP_ENV=$(APP_ENV)"
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) up -d --build
+migrate: ## Apply database migrations
+	$(UV) alembic upgrade head
 
-up.echo: guard-APP_ENV
-	@echo "APP_ENV=$(APP_ENV)"
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) up --build
+migration: ## Generate a migration: make migration m="add something"
+	@test -n "$(m)" || (echo 'Usage: make migration m="message"' && exit 1)
+	$(UV) alembic revision --autogenerate -m "$(m)"
 
-up.keycloak: guard-APP_ENV
-	@echo "APP_ENV=$(APP_ENV)"
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) up -d keycloak keycloak-postgres --build
+format: ## Format code and apply safe lint fixes
+	$(UV) ruff format
+	$(UV) ruff check --fix
 
-down: guard-APP_ENV
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) down
+lint: ## Run static checks
+	$(UV) ruff format --check
+	$(UV) ruff check
+	$(UV) mypy
+	$(UV) slotscheck src
 
-down.total: guard-APP_ENV
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) down -v
+test: ## Run all tests (integration tests need Docker)
+	$(UV) pytest
 
-logs.db: guard-APP_ENV
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) logs -f web_app_db_pg
+test.unit: ## Run unit tests only
+	$(UV) pytest -m "not integration"
 
-shell.db: guard-APP_ENV
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) exec web_app_db_pg sh
+cov: ## Run tests with a coverage report
+	$(UV) coverage run -m pytest
+	$(UV) coverage combine
+	$(UV) coverage report
 
-shell.app: guard-APP_ENV
-	@cd $(CONFIGS_DIG)/$(APP_ENV) && $(DOCKER_COMPOSE) --env-file .env.$(APP_ENV) exec web_app sh
+clean: ## Remove caches and build artifacts
+	find . -type d -name "__pycache__" -not -path "./.venv/*" -exec rm -rf {} +
+	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage .coverage.* htmlcov build dist
 
-prune:
-	$(DOCKER_COMPOSE_PRUNE)
-
-# Code quality
-.PHONY: code.format code.lint code.test code.cov code.cov.html code.check
-code.format:
-	ruff format
-
-code.lint: code.format
-	ruff check --exit-non-zero-on-fix
-	slotscheck src
-	mypy
-
-code.test:
-	pytest -v
-
-code.cov:
-	coverage run -m pytest
-	coverage combine
-	coverage report
-
-code.cov.html:
-	coverage run -m pytest
-	coverage combine
-	coverage html
-
-code.check: code.lint
-
-# Project structure visualization
-PYCACHE_DEL := scripts/makefile/pycache_del.sh
-DISHKA_PLOT_DATA := scripts/dishka/plot_dependencies_data.py
-
-.PHONY: pycache-del tree plot-data
-pycache-del:
-	@$(PYCACHE_DEL)
-
-# Clean tree
-tree: pycache-del
-	@tree
-
-# Dishka
-plot-data:
-	@$(PYTHON) $(DISHKA_PLOT_DATA)
-
-.PHONY: activate-env
-activate-env:
-	@echo "To activate the virtual environment, run:"
-	@echo "  source .venv/bin/activate"
+deps-graph: ## Print the Dishka dependency graph (d2 format)
+	$(UV) python scripts/dishka/plot_dependencies_data.py
