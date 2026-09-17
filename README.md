@@ -72,8 +72,11 @@ Settings come from environment variables, then from `.env`. Nested settings use 
 | `DATABASE__NAME` | `app` | |
 | `DATABASE__POOL_SIZE` | `10` | |
 | `DATABASE__MAX_OVERFLOW` | `10` | |
+| `DATABASE__DRIVER` | `psycopg` | SQLAlchemy driver (`postgresql+<driver>`) |
 | `DATABASE__ECHO` | `false` | Log SQL statements |
+| `DATABASE__ECHO_POOL` | `false` | Log connection pool events |
 | `CORS__ALLOW_ORIGINS` | `[]` | JSON list; CORS is disabled when empty |
+| `CORS__ALLOW_CREDENTIALS` | `false` | Allow cookies and `Authorization` in CORS requests |
 | `LOG__LEVEL` | `INFO` | |
 
 ## Architecture
@@ -123,7 +126,7 @@ modules/<name>/
 ### Unit of work and domain events
 
 Aggregates record events with `record_event()`. Repositories track every aggregate
-they add, save, delete or load by id. `UnitOfWork.commit()` then:
+they add or return. `UnitOfWork.commit()` then:
 
 1. flushes pending changes;
 2. publishes the recorded events: handlers run in the **same session and
@@ -139,12 +142,36 @@ Handlers are registered in `src/app/event_handlers.py` and must never call `comm
 Events are not durable; to notify external systems reliably, add a transactional
 outbox.
 
+Sessions use `autoflush=False`: pending changes are flushed at the start of each
+dispatch round, not before every query. A query in a use case does not see the rows
+the same use case added, and a handler does not see the changes made by a previous
+handler of the same round.
+
+### Repositories and concurrency
+
+- A repository remembers the ORM model behind every aggregate it adds or returns
+  during the request. `save()` writes the aggregate onto that model, so only changed
+  columns are updated; `delete()` removes it at flush time. Saving or deleting an
+  aggregate that was not added or loaded by the repository in the same request raises
+  `UntrackedAggregateError`.
+- Models use `VersionMixin`: every update and delete checks the version read by the
+  request. If another request changed or deleted the row in between, the commit fails
+  with a 409 `concurrent_modification` error and nothing is written; clients reload
+  and retry.
+- Uniqueness is checked by the use case for a clear error, and enforced by a unique
+  constraint when two requests race (409 `unique_violation`).
+- `get_by_id(..., lock=True)` takes a `FOR SHARE` row lock until the end of the
+  transaction, for writes that depend on another aggregate staying unchanged.
+
 ### Calls between modules
 
 `tasks` needs to know whether a project exists and is active. It declares its own
 port, `ProjectLookupPort`, implemented by an adapter calling
 `modules.projects.public`. The `tasks` domain never sees a `Project`, and there is no
 foreign key between the `tasks` and `projects` tables.
+
+Creating a task locks the project (`lock=True`) until the task is committed, so a
+concurrent archive or delete waits, then cancels or deletes the new task.
 
 ### Errors
 
@@ -159,9 +186,9 @@ HTTP status:
 | `DomainValidationError` | 422 |
 | other `DomainError` | 400 |
 
-Unique and foreign key violations become `ConflictError`, invalid requests return 422
-and unexpected errors return a generic 500 (details only in the logs). Every error
-uses `application/problem+json`:
+Unique and foreign key violations and concurrent modifications become
+`ConflictError`, invalid requests return 422 and unexpected errors return a generic
+500 (details only in the logs). Every error uses `application/problem+json`:
 
 ```json
 {
@@ -196,13 +223,16 @@ field is rejected with 422.
    category, repository port.
 3. Application: DTO and one class per command or query; commands end with
    `uow.commit()`.
-4. Infrastructure: ORM model (`UUIDPrimaryKeyMixin`, `TimestampMixin`, `Base`), mapper,
-   repository (`SqlaRepository` with its whitelists).
+4. Infrastructure: ORM model (`UUIDPrimaryKeyMixin`, `VersionMixin`, `TimestampMixin`,
+   `Base`), mapper (`to_model`, `apply`, `to_entity`), repository (`SqlaRepository`
+   with its whitelists).
 5. Presentation: schemas, controllers, `create_<name>_router()`.
 6. `provider.py`, and `public.py` for what other modules may use.
 7. Wire it in `src/app/`: `providers.py`, `routers.py`, `models.py` and, if needed,
    `event_handlers.py`.
-8. Add the module to the `layers` contract in `pyproject.toml`.
+8. In `pyproject.toml`, add the module to the `layers` contract and add `forbidden`
+   contracts so that other modules only import its `public.py` (see the `tasks` /
+   `projects` contracts).
 9. `make migration m="add <name>"`, review the generated file, `make migrate`.
 10. Write unit and integration tests, then run `make lint test`.
 
@@ -216,4 +246,4 @@ and their references in `src/app/`, `tests/`, `migrations/versions/` and
 - Run `alembic upgrade head` before starting a new version.
 - Use `/health` for liveness and `/health/ready` for readiness.
 - In production, set `APP__ENVIRONMENT=production`, `APP__DOCS_ENABLED=false` and
-  explicit `CORS__ALLOW_ORIGINS`.
+  explicit `CORS__ALLOW_ORIGINS` (never `["*"]` with `CORS__ALLOW_CREDENTIALS=true`).

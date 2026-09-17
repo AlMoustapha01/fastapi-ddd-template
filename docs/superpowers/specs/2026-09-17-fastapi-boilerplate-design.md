@@ -445,3 +445,24 @@ Hook local `make lint` (conservé).
 3. `make test` passe (unitaires + intégration testcontainers).
 4. `docker compose up --build` : `/health/ready` = 200, `POST /api/v1/projects` = 201.
 5. `alembic upgrade head` puis `alembic check` : aucune différence modèle/migration.
+
+## 11. Révisions après la revue de code (2026-09-17)
+
+Décisions validées après la revue finale de l'implémentation :
+
+1. **Repository (remplace « `save` (merge) » du §5.3).** `session.merge()` relisait la ligne
+   et recopiait toutes les colonnes : une ligne supprimée par une requête concurrente était
+   réinsérée et les modifications concurrentes écrasées. Le repository garde désormais les
+   modèles qu'il ajoute ou charge pendant la requête ; `save` écrit l'agrégat sur ce modèle,
+   `delete` utilise `session.delete` (ou `expunge` pour un modèle non encore inséré). Un
+   agrégat non chargé par le repository lève `UntrackedAggregateError`.
+2. **Verrou optimiste.** `VersionMixin` (`version_id_col` SQLAlchemy) sur `projects` et
+   `tasks` ; `StaleDataError` → `ConflictError` (`concurrent_modification`, 409).
+3. **Course création de tâche / archivage ou suppression (§6.2).** `CreateTaskCommand` pose
+   un verrou `FOR SHARE` sur le projet via `ProjectLookupPort.get(..., lock=True)` →
+   `ProjectsPublicApi.get_summary(..., lock=True)` → `get_by_id(..., lock=True)`.
+4. **Mineurs.** Exactement `MAX_EVENT_ROUNDS` tours de dispatch autorisés ; handler
+   `HTTPException` robuste (statuts sans corps, `detail` structuré, codes non standard) ;
+   `CORS__ALLOW_CREDENTIALS` configurable (faux par défaut) ; Postgres de Compose lié à
+   `127.0.0.1` ; venv de l'image en lecture seule pour l'utilisateur runtime ; CI avec
+   `permissions: contents: read` et groupe de concurrence ; README complété.
