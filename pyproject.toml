@@ -63,7 +63,7 @@ parallel = true
 branch = true
 
 [tool.mypy]
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 strict = true
 ignore_missing_imports = true
 allow_subclassing_any = true
