@@ -7,6 +7,7 @@ from typing import cast
 import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 
 from core.domain.errors import ConflictError
 from core.domain.events import DomainEvent
@@ -169,6 +170,37 @@ async def test_unique_violation_becomes_a_conflict_error() -> None:
     assert exc_info.value.code == "unique_violation"
     assert exc_info.value.details == {"constraint": "uq_samples_label"}
     assert session.calls == ["flush", "commit", "rollback"]
+
+
+async def test_stale_data_becomes_a_concurrent_modification_conflict() -> None:
+    session = FakeSession(commit_error=StaleDataError("0 rows matched"))
+
+    with pytest.raises(ConflictError) as exc_info:
+        await make_uow(session, AggregateTracker(), RecordingBus(session)).commit()
+
+    assert exc_info.value.code == "concurrent_modification"
+    assert session.calls == ["flush", "commit", "rollback"]
+
+
+async def test_chains_that_settle_within_the_round_limit_are_committed() -> None:
+    session = FakeSession()
+    tracker = AggregateTracker()
+    aggregate = make_sample()
+    aggregate.rename("round-1")
+    tracker.track(aggregate)
+    rounds = 1
+
+    def rename_until_the_limit(_event: DomainEvent) -> None:
+        nonlocal rounds
+        if rounds < MAX_EVENT_ROUNDS:
+            rounds += 1
+            aggregate.rename(f"round-{rounds}")
+
+    bus = RecordingBus(session, on_publish=rename_until_the_limit)
+    await make_uow(session, tracker, bus).commit()
+
+    assert len(bus.published) == MAX_EVENT_ROUNDS
+    assert session.calls[-1] == "commit"
 
 
 async def test_unknown_integrity_error_is_reraised_after_rollback() -> None:

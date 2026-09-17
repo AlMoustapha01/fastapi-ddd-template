@@ -6,13 +6,17 @@ from sqlalchemy import CheckConstraint, Index, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.infrastructure.db.base import Base
-from core.infrastructure.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
+from core.infrastructure.db.mixins import (
+    TimestampMixin,
+    UUIDPrimaryKeyMixin,
+    VersionMixin,
+)
 from modules.tasks.domain.enums import TaskStatus
 
 STATUS_VALUES = ", ".join(f"'{status.value}'" for status in TaskStatus)
 
 
-class TaskModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class TaskModel(UUIDPrimaryKeyMixin, VersionMixin, TimestampMixin, Base):
     """`project_id` has no foreign key: `projects` belongs to another module."""
 
     __tablename__ = "tasks"

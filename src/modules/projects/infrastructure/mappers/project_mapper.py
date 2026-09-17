@@ -13,14 +13,16 @@ from modules.projects.infrastructure.models import ProjectModel
 
 class ProjectMapper(EntityMapper[Project, ProjectModel]):
     def to_model(self, entity: Project) -> ProjectModel:
-        return ProjectModel(
-            id=entity.id_.value,
-            name=entity.props.name.value,
-            description=entity.props.description.value,
-            status=entity.props.status.value,
-            created_at=entity.created_at_,
-            updated_at=entity.updated_at_,
-        )
+        model = ProjectModel(id=entity.id_.value)
+        self.apply(entity, model)
+        return model
+
+    def apply(self, entity: Project, model: ProjectModel) -> None:
+        model.name = entity.props.name.value
+        model.description = entity.props.description.value
+        model.status = entity.props.status.value
+        model.created_at = entity.created_at_
+        model.updated_at = entity.updated_at_
 
     def to_entity(self, model: ProjectModel) -> Project:
         return Project(

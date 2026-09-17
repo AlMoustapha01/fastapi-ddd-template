@@ -1,4 +1,4 @@
-"""Translate database integrity errors into domain errors."""
+"""Translate database errors into domain errors."""
 
 from typing import Any, Final
 
@@ -29,3 +29,11 @@ def map_integrity_error(error: IntegrityError) -> ConflictError | None:
             details=details,
         )
     return None
+
+
+def concurrent_modification_error() -> ConflictError:
+    """Optimistic locking failure: the row changed or vanished since it was read."""
+    return ConflictError(
+        "The resource was modified or deleted by another request. Retry.",
+        code="concurrent_modification",
+    )

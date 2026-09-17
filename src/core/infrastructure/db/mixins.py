@@ -1,10 +1,11 @@
 """Reusable ORM columns."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import DateTime, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, Integer, Uuid
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 
 class UUIDPrimaryKeyMixin:
@@ -18,3 +19,18 @@ class TimestampMixin:
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class VersionMixin:
+    """
+    Optimistic locking managed by SQLAlchemy.
+
+    Every UPDATE and DELETE checks the version read by the request and increments
+    it; a mismatch raises `StaleDataError`, turned into a 409 by the unit of work.
+    """
+
+    version: Mapped[int] = mapped_column(Integer)
+
+    @declared_attr.directive
+    def __mapper_args__(cls) -> dict[str, Any]:  # noqa: PLW3201 - SQLAlchemy hook
+        return {"version_id_col": cls.version}

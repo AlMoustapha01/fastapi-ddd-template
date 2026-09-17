@@ -1,9 +1,9 @@
 """Generic SQLAlchemy repository for aggregate roots."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any, ClassVar
 
-from sqlalchemy import delete, func, inspect, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.domain.aggregate_root import AggregateRoot
@@ -17,13 +17,24 @@ from core.infrastructure.db.tracker import AggregateTracker
 DEFAULT_SORT = Sort("created_at", SortDirection.DESC)
 
 
+class UntrackedAggregateError(RuntimeError):
+    """`save` or `delete` received an aggregate not loaded or added in this request."""
+
+
 class SqlaRepository[TEntity: AggregateRoot[Any, Any], TModel: Base]:
     """
     Persistence and paginated listing of one aggregate type.
 
+    The repository keeps the ORM model behind every aggregate it adds or loads
+    during the request. `save` writes the aggregate onto that same model, so only
+    changed columns are updated and the version read by the request is checked
+    (see `VersionMixin`); `delete` removes that model at flush time. Aggregates
+    must therefore be loaded or added through the repository before being saved
+    or deleted.
+
     Subclasses declare the columns clients may sort, filter and search on. Every
-    aggregate added, saved, deleted or loaded by id is tracked so that the unit of
-    work publishes its domain events.
+    aggregate returned by the repository is tracked so that the unit of work
+    publishes its domain events.
     """
 
     sortable_fields: ClassVar[frozenset[str]] = frozenset({"created_at", "updated_at"})
@@ -42,28 +53,37 @@ class SqlaRepository[TEntity: AggregateRoot[Any, Any], TModel: Base]:
         self._tracker = tracker
         self._model = model
         self._mapper = mapper
+        mapper_info = inspect(model)
+        self._primary_key = mapper_info.primary_key[0]
+        self._primary_key_attribute = mapper_info.get_property_by_column(
+            self._primary_key
+        ).key
+        self._models: dict[object, TModel] = {}
 
     async def add(self, entity: TEntity) -> None:
-        self._session.add(self._mapper.to_model(entity))
+        model = self._mapper.to_model(entity)
+        self._session.add(model)
+        self._models[entity.id_.value] = model
         self._tracker.track(entity)
 
     async def save(self, entity: TEntity) -> None:
-        await self._session.merge(self._mapper.to_model(entity))
+        self._mapper.apply(entity, self._model_of(entity))
         self._tracker.track(entity)
 
     async def delete(self, entity: TEntity) -> None:
-        primary_key = inspect(self._model).primary_key[0]
-        statement = delete(self._model).where(primary_key == entity.id_.value)
-        await self._session.execute(statement)
+        model = self._models.pop(entity.id_.value, None)
+        if model is None:
+            raise self._untracked(entity)
+        if inspect(model).pending:
+            self._session.expunge(model)
+        else:
+            await self._session.delete(model)
         self._tracker.track(entity)
 
     async def get_by_id(self, entity_id: EntityId) -> TEntity | None:
-        model = await self._session.get(self._model, entity_id.value)
-        if model is None:
-            return None
-        entity = self._mapper.to_entity(model)
-        self._tracker.track(entity)
-        return entity
+        statement = select(self._model).where(self._primary_key == entity_id.value)
+        model = await self._session.scalar(statement)
+        return None if model is None else self._load(model)
 
     async def list_page(
         self,
@@ -91,8 +111,30 @@ class SqlaRepository[TEntity: AggregateRoot[Any, Any], TModel: Base]:
         )
         models = (await self._session.scalars(statement)).all()
         return Page(
-            items=[self._mapper.to_entity(model) for model in models],
+            items=self._load_all(models),
             total=total,
             page=params.page,
             size=params.size,
+        )
+
+    def _load(self, model: TModel) -> TEntity:
+        """Remember a loaded model and return its tracked aggregate."""
+        self._models[getattr(model, self._primary_key_attribute)] = model
+        entity = self._mapper.to_entity(model)
+        self._tracker.track(entity)
+        return entity
+
+    def _load_all(self, models: Iterable[TModel]) -> list[TEntity]:
+        return [self._load(model) for model in models]
+
+    def _model_of(self, entity: TEntity) -> TModel:
+        model = self._models.get(entity.id_.value)
+        if model is None:
+            raise self._untracked(entity)
+        return model
+
+    def _untracked(self, entity: TEntity) -> UntrackedAggregateError:
+        return UntrackedAggregateError(
+            f"{type(entity).__name__} '{entity.id_.value}' was not loaded or added "
+            "by this repository in the current request."
         )

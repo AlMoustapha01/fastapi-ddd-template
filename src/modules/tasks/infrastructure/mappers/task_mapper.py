@@ -9,15 +9,17 @@ from modules.tasks.infrastructure.models import TaskModel
 
 class TaskMapper(EntityMapper[Task, TaskModel]):
     def to_model(self, entity: Task) -> TaskModel:
-        return TaskModel(
-            id=entity.id_.value,
-            project_id=entity.props.project_id,
-            title=entity.props.title.value,
-            description=entity.props.description.value,
-            status=entity.props.status.value,
-            created_at=entity.created_at_,
-            updated_at=entity.updated_at_,
-        )
+        model = TaskModel(id=entity.id_.value)
+        self.apply(entity, model)
+        return model
+
+    def apply(self, entity: Task, model: TaskModel) -> None:
+        model.project_id = entity.props.project_id
+        model.title = entity.props.title.value
+        model.description = entity.props.description.value
+        model.status = entity.props.status.value
+        model.created_at = entity.created_at_
+        model.updated_at = entity.updated_at_
 
     def to_entity(self, model: TaskModel) -> Task:
         return Task(

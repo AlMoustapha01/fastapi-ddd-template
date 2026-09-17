@@ -4,13 +4,17 @@ from sqlalchemy import CheckConstraint, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.infrastructure.db.base import Base
-from core.infrastructure.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
+from core.infrastructure.db.mixins import (
+    TimestampMixin,
+    UUIDPrimaryKeyMixin,
+    VersionMixin,
+)
 from modules.projects.domain.enums import ProjectStatus
 
 STATUS_VALUES = ", ".join(f"'{status.value}'" for status in ProjectStatus)
 
 
-class ProjectModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class ProjectModel(UUIDPrimaryKeyMixin, VersionMixin, TimestampMixin, Base):
     __tablename__ = "projects"
     __table_args__ = (CheckConstraint(f"status IN ({STATUS_VALUES})", name="status"),)
 

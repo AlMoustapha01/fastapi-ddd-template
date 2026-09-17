@@ -34,11 +34,7 @@ class SqlaTaskRepository(SqlaRepository[Task, TaskModel], TaskRepositoryPort):
             )
             .order_by(TaskModel.created_at, TaskModel.id)
         )
-        models = (await self._session.scalars(statement)).all()
-        tasks = [self._mapper.to_entity(model) for model in models]
-        for task in tasks:
-            self._tracker.track(task)
-        return tasks
+        return self._load_all((await self._session.scalars(statement)).all())
 
     async def delete_by_project(self, project_id: UUID) -> None:
         statement = delete(TaskModel).where(TaskModel.project_id == project_id)
