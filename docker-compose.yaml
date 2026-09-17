@@ -1,0 +1,49 @@
+name: fastapi-ddd-template
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DATABASE__USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE__PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE__NAME:-app}
+    ports:
+      - "${DATABASE__PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE__HOST: db
+      DATABASE__PORT: 5432
+      DATABASE__USER: ${DATABASE__USER:-postgres}
+      DATABASE__PASSWORD: ${DATABASE__PASSWORD:-postgres}
+      DATABASE__NAME: ${DATABASE__NAME:-app}
+      PYTHONPATH: /app/src
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src:ro
+      - ./migrations:/app/migrations:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        exec uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
+        --reload --reload-dir /app/src
+
+volumes:
+  pgdata:
