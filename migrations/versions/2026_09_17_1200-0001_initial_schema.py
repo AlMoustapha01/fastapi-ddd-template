@@ -32,8 +32,28 @@ def upgrade() -> None:
         sa.UniqueConstraint("name", name=op.f("uq_projects_name")),
     )
     op.create_index(op.f("ix_projects_status"), "projects", ["status"], unique=False)
+    op.create_table(
+        "tasks",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("project_id", sa.Uuid(), nullable=False),
+        sa.Column("title", sa.String(length=200), nullable=False),
+        sa.Column("description", sa.Text(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "status IN ('todo', 'in_progress', 'done', 'cancelled')",
+            name=op.f("ck_tasks_status"),
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_tasks")),
+    )
+    op.create_index(
+        "ix_tasks_project_id_status", "tasks", ["project_id", "status"], unique=False
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_tasks_project_id_status", table_name="tasks")
+    op.drop_table("tasks")
     op.drop_index(op.f("ix_projects_status"), table_name="projects")
     op.drop_table("projects")

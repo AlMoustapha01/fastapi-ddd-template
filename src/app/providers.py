@@ -5,7 +5,13 @@ from dishka import Provider
 from app.event_handlers import EventHandlersProvider
 from core.infrastructure.provider import core_providers
 from modules.projects.provider import ProjectsProvider
+from modules.tasks.provider import TasksProvider
 
 
 def get_providers() -> tuple[Provider, ...]:
-    return (*core_providers(), EventHandlersProvider(), ProjectsProvider())
+    return (
+        *core_providers(),
+        EventHandlersProvider(),
+        ProjectsProvider(),
+        TasksProvider(),
+    )
