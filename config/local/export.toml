@@ -1,0 +1,44 @@
+# Don't rename `export` or `fields`
+[export]
+fields = [
+    # APP from config
+    "app.NAME",
+    "app.PROJECT_DESCRIPTION",
+    "app.VERSION",
+    
+    # PostgreSQL from secrets
+    "postgres.USER",
+    "postgres.PASSWORD",
+    # PostgreSQL from config
+    "postgres.DB",
+    "postgres.PORT",
+    # Uvicorn from config
+    "uvicorn.HOST",
+    "uvicorn.PORT",
+
+    # Keycloak from config
+    "kc.DB",
+    "kc.DB_NAME",
+    "kc.DB_USERNAME",
+    "kc.DB_PASSWORD",
+    "kc.DB_URL",
+    "kc.HOSTNAME",
+    "kc.PORT",
+    "kc.PORT_SECURED",
+    "kc.DB_PORT",
+
+    "kc_app.SERVER_URL",
+    "kc_app.REALM",
+    "kc_app.CLIENT_ID",
+    "kc_app.CLIENT_SECRET",
+    "kc_app.PUBLIC_KEY",
+    "kc_app.AUTHORIZATION_ENDPOINT",
+    "kc_app.TOKEN_ENDPOINT",
+    "kc_app.USERINFO_ENDPOINT",
+    "kc_app.JWKS_ENDPOINT",
+    "kc_app.LOGOUT_ENDPOINT",
+    "kc_app.SCOPES",
+    # Keycloak admin user from config
+    "kc_admin.USER",
+    "kc_admin.PASSWORD",
+]

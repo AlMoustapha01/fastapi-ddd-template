@@ -1,0 +1,96 @@
+services:
+  web_app_db_pg:
+    container_name: "eq_prepaid_db_pg_${APP_ENV}"
+    image: postgres:16-alpine
+    shm_size: 128mb
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - app_net
+
+  web_app:
+    build:
+      context: ../..
+      dockerfile: config/${APP_ENV}/Dockerfile
+    image: eq_prepaid_web_app:latest
+    environment:
+      APP_ENV: ${APP_ENV}
+      UVICORN_HOST: ${UVICORN_HOST}
+      UVICORN_PORT: ${UVICORN_PORT}
+      POSTGRES_HOST: web_app_db_pg
+      KEYCLOAK_PUBLIC_KEY: ${KEYCLOAK_PUBLIC_KEY}
+    ports:
+      - "${UVICORN_PORT}:${UVICORN_PORT}"
+    volumes:
+      - ../../src:/app/src
+    depends_on:
+      web_app_db_pg:
+        condition: service_healthy
+    command: >
+      sh -c "
+      echo 'Running alembic migrations...' &&
+      alembic upgrade head &&
+      echo 'Starting Uvicorn with auto-reload...' &&
+      uvicorn app.run:make_app --factory --host ${UVICORN_HOST} --port ${UVICORN_PORT} --reload --reload-dir /app/src
+      "
+    networks:
+      - app_net
+      - keycloak_net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    volumes:
+      - ./realm:/opt/keycloak/data/import
+    environment:
+      KC_DB: ${KC_DB}
+      KC_DB_URL: ${KC_DB_URL}
+      KC_DB_USERNAME: ${KC_DB_USERNAME}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_HOSTNAME: ${KC_HOSTNAME}
+      KEYCLOAK_ADMIN: ${KC_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+
+    ports:
+      - ${KC_PORT_SECURED}:8443
+      - ${KC_PORT}:8080
+
+    command: start-dev --import-realm
+    depends_on:
+      - keycloak-postgres
+    networks:
+      - keycloak_net
+
+  keycloak-postgres:
+    image: postgres:16
+    volumes:
+      - keycloak-pgdata:/var/lib/postgresql/data
+    ports:
+      - ${KC_DB_PORT}:5432
+    environment:
+      POSTGRES_USER: ${KC_DB_USERNAME}
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+      POSTGRES_DB: ${KC_DB_NAME}
+    networks:
+      - keycloak_net
+
+volumes:
+  pgdata:
+  keycloak-pgdata:
+
+networks:
+  app_net:
+    driver: bridge
+  keycloak_net:
+    driver: bridge
