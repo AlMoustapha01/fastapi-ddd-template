@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from http import HTTPStatus
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 
@@ -153,6 +153,53 @@ async def test_request_validation_errors_are_problem_details(
     body = response.json()
     assert body["code"] == "request_validation_error"
     assert body["errors"][0]["loc"] == ["query", "limit"]
+
+
+async def test_http_exception_with_structured_detail(
+    app: FastAPI, client: AsyncClient
+) -> None:
+    async def raise_error() -> None:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail={"field": "x"})
+
+    app.add_api_route("/boom", raise_error)
+
+    response = await client.get("/boom")
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    body = response.json()
+    assert "detail" not in body
+    assert body["details"] == {"field": "x"}
+
+
+async def test_http_exception_with_a_non_standard_status(
+    app: FastAPI, client: AsyncClient
+) -> None:
+    async def raise_error() -> None:
+        raise HTTPException(status_code=599, detail="Custom")
+
+    app.add_api_route("/boom", raise_error)
+
+    response = await client.get("/boom")
+
+    assert response.status_code == 599
+    assert response.json() == {
+        "type": "about:blank",
+        "title": "Error",
+        "status": 599,
+        "detail": "Custom",
+    }
+
+
+async def test_http_exception_without_body(app: FastAPI, client: AsyncClient) -> None:
+    async def raise_error() -> None:
+        raise HTTPException(status_code=HTTPStatus.NOT_MODIFIED)
+
+    app.add_api_route("/boom", raise_error)
+
+    response = await client.get("/boom")
+
+    assert response.status_code == HTTPStatus.NOT_MODIFIED
+    assert response.content == b""
 
 
 async def test_unknown_routes_are_problem_details(client: AsyncClient) -> None:

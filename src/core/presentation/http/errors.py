@@ -8,7 +8,8 @@ from typing import Any, Final, cast
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from fastapi.utils import is_body_allowed_for_status_code
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -47,9 +48,17 @@ class ProblemDetails(BaseModel):
 def error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
     """OpenAPI `responses` entries for the given error status codes."""
     return {
-        code: {"model": ProblemDetails, "description": HTTPStatus(code).phrase}
+        code: {"model": ProblemDetails, "description": status_title(code)}
         for code in status_codes
     }
+
+
+def status_title(status_code: int) -> str:
+    """Reason phrase of a status code, or `Error` for non-standard codes."""
+    try:
+        return HTTPStatus(status_code).phrase
+    except ValueError:
+        return "Error"
 
 
 def status_code_for(error: DomainError) -> int:
@@ -69,7 +78,7 @@ def problem_response(
 ) -> JSONResponse:
     body: dict[str, Any] = {
         "type": "about:blank",
-        "title": HTTPStatus(status_code).phrase,
+        "title": status_title(status_code),
         "status": int(status_code),
     }
     if detail is not None:
@@ -108,10 +117,18 @@ async def handle_request_validation_error(
     )
 
 
-async def handle_http_exception(_request: Request, exc: Exception) -> JSONResponse:
+async def handle_http_exception(_request: Request, exc: Exception) -> Response:
     error = cast(StarletteHTTPException, exc)
+    if not is_body_allowed_for_status_code(error.status_code):
+        return Response(status_code=error.status_code, headers=error.headers)
+    if isinstance(error.detail, str):
+        return problem_response(
+            status_code=error.status_code, detail=error.detail, headers=error.headers
+        )
     return problem_response(
-        status_code=error.status_code, detail=str(error.detail), headers=error.headers
+        status_code=error.status_code,
+        extra={"details": error.detail},
+        headers=error.headers,
     )
 
 
