@@ -63,7 +63,8 @@ parallel = true
 branch = true
 
 [tool.mypy]
-files = ["src", "tests", "scripts"]
+files = ["src", "tests", "scripts", "migrations"]
+exclude = ["^migrations/versions/"]
 strict = true
 ignore_missing_imports = true
 allow_subclassing_any = true
@@ -122,3 +123,13 @@ split-on-trailing-comma = true
 
 [tool.slotscheck]
 strict-imports = false
+
+[tool.alembic]
+script_location = "%(here)s/migrations"
+file_template = "%%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s"
+
+[[tool.alembic.post_write_hooks]]
+name = "ruff"
+type = "module"
+module = "ruff"
+options = "format REVISION_SCRIPT_FILENAME"
